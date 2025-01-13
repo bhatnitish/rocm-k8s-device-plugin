@@ -35,9 +35,9 @@ const (
     healthSocket = "/var/lib/amd-metrics-exporter/amdgpu_device_metrics_exporter_grpc.socket"
 )
 
-// GetGPUHealth returns device id map with health state if the metrics service
+// getGPUHealth returns device id map with health state if the metrics service
 // is available else returns error
-func GetGPUHealth() (hMap map[string]string, err error) {
+func getGPUHealth() (hMap map[string]string, err error) {
     // if the exporter service is not available done proceed
     healthSvcAddress := fmt.Sprintf("unix://%v", healthSocket)
     if _, err = os.Stat(healthSocket); err != nil {
@@ -74,4 +74,28 @@ func GetGPUHealth() (hMap map[string]string, err error) {
         }
     }
     return
+}
+
+// PopulatePerGPUDHealth populate the per gpu health status if available, 
+// else return simple health status
+func PopulatePerGPUDHealth(devs []*pluginapi.Device, defaultHealth string) {
+    var hasHealthSvc = false
+    hMap, err := getGPUHealth()
+    if err == nil {
+        hasHealthSvc = true
+    }
+
+    for i := 0; i < len(devs); i++ {
+        if !hasHealthSvc {
+            devs[i].Health = defaultHealth
+        }else {
+            // only use if we have the device id entry
+            if gpuHealth, ok := hMap[devs[i].ID]; ok {
+                devs[i].Health = gpuHealth
+            } else {
+                // revert to simpleHealthCheck if not found
+                devs[i].Health = defaultHealth
+            }
+        }
+    }
 }
