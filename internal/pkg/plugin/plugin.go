@@ -184,31 +184,14 @@ func (p *AMDGPUPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 		select {
 		case <-p.Heartbeat:
 			var health = pluginapi.Unhealthy
-			var hasHealthSvc = false
 
 			if simpleHealthCheck() {
 				health = pluginapi.Healthy
 			}
 
-			// per device health check
-			hMap, err := exporter.GetGPUHealth()
-			if err == nil {
-				hasHealthSvc = true
-			}
+			// update with per device GPU health status
+			exporter.PopulatePerGPUDHealth(devs, health)
 
-			for i := 0; i < len(p.AMDGPUs); i++ {
-				if !hasHealthSvc {
-					devs[i].Health = health
-				}else {
-					// only use if we have the device id entry
-					if gpuHealth, ok := hMap[devs[i].ID]; ok {
-						devs[i].Health = gpuHealth
-					} else {
-						// revert to simpleHealthCheck if not found
-						devs[i].Health = health
-					}
-				}
-			}
 			s.Send(&pluginapi.ListAndWatchResponse{Devices: devs})
 		case <-p.signal:
 			glog.Infof("Received signal, exiting")
