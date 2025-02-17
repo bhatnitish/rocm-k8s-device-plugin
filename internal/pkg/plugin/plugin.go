@@ -27,6 +27,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/ROCm/k8s-device-plugin/internal/pkg/allocator"
 	"github.com/ROCm/k8s-device-plugin/internal/pkg/amdgpu"
 	"github.com/ROCm/k8s-device-plugin/internal/pkg/exporter"
 	"github.com/golang/glog"
@@ -241,8 +242,17 @@ func (p *AMDGPUPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 // guaranteed to be the allocation ultimately performed by the
 // devicemanager. It is only designed to help the devicemanager make a more
 // informed allocation decision when possible.
-func (p *AMDGPUPlugin) GetPreferredAllocation(context.Context, *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
-	return &pluginapi.PreferredAllocationResponse{}, nil
+func (p *AMDGPUPlugin) GetPreferredAllocation(ctx context.Context, req *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
+	response := &pluginapi.PreferredAllocationResponse{}
+	for _, req := range req.ContainerRequests{
+		// TODO: pass gpus to policy allocate method
+		allocated_ids := NewBestEffortPolicy().Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size, nil)
+		resp := &pluginapi.ContainerPreferredAllocationResponse{
+			DeviceIDs: allocated_ids,
+		}
+		response.ContainerResponses = append(response.ContainerResponses, resp)
+	}
+	return response, nil
 }
 
 // Allocate is called during container creation so that the Device

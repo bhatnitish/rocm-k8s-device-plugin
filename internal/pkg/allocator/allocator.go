@@ -17,15 +17,14 @@
 package allocator
 
 import (
-	"fmt"
-	
-	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
 )
 
 type Allocator struct {
-
+	available []*Device
+	allocated []*Device
+	policy    Policy
 }
 
 type Policy interface {
-	Allocate(available []*pluginapi.Device, required []*pluginapi.Device, size int) []*pluginapi.Device
+	Allocate(available, required []string, size int, devices []*Device) []string
 }
