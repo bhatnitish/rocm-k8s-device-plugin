@@ -38,10 +38,11 @@ import (
 
 // Plugin is identical to DevicePluginServer interface of device plugin API.
 type AMDGPUPlugin struct {
-	AMDGPUs   map[string]map[string]interface{}
-	Heartbeat chan bool
-	signal    chan os.Signal
-	Resource  string
+	AMDGPUs      map[string]map[string]interface{}
+	Heartbeat    chan bool
+	signal       chan os.Signal
+	Resource     string
+	devAllocator *allocator.BestEffortPolicy
 }
 
 // Start is an optional interface that could be implemented by plugin.
@@ -52,8 +53,30 @@ type AMDGPUPlugin struct {
 func (p *AMDGPUPlugin) Start() error {
 	p.signal = make(chan os.Signal, 1)
 	signal.Notify(p.signal, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTERM)
+	p.devAllocator = allocator.NewBestEffortPolicy()
+	p.devAllocator.Init(getDevices(), "")
 
 	return nil
+}
+
+func getDevices() []*allocator.Device {
+	devices, _ := amdgpu.GetAMDGPUs()
+	var deviceList []*allocator.Device
+
+	for id, deviceData := range devices {
+		device := &Device{
+			Id:               id,
+			Card:             deviceData["card"].(int),
+			RenderD:          deviceData["renderD"].(int),
+			DevId:            deviceData["devID"].(int),
+			ComputePartition: deviceData["computePartition"].(string),
+			MemoryPartition:  deviceData["memoryPartition"].(string),
+			NodeId:           deviceData["nodeId"].(int),
+			NumaNode:         deviceData["numaNode"].(int),
+		}
+		deviceList = append(deviceList, device)
+	}
+	return deviceList
 }
 
 // Stop is an optional interface that could be implemented by plugin.
@@ -246,7 +269,7 @@ func (p *AMDGPUPlugin) GetPreferredAllocation(ctx context.Context, req *pluginap
 	response := &pluginapi.PreferredAllocationResponse{}
 	for _, req := range req.ContainerRequests {
 		// TODO: pass gpus to policy allocate method
-		allocated_ids, err := NewBestEffortPolicy().Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size)
+		allocated_ids, err := p.devAllocator.Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size)
 		if err != nil {
 			return nil, fmt.Errorf("unable to get preferred allocation list. Error:%v", err)
 		}
