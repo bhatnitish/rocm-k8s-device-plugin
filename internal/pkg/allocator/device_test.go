@@ -34,6 +34,16 @@ func getTestDevices() []*Device {
 	return res
 }
 
+func TestPairWeightsCalculationEmptyDevices(t *testing.T) {
+	folderPath := "../../../testdata/topology-parsing-mi308/topology/nodes"
+	p2pWeights := make(map[int]map[int]int)
+	var devices []*Device
+	err := fetchAllPairWeights(devices, p2pWeights, folderPath)
+	if err == nil {
+		t.Errorf("fetchAllPairWeights call is expected to return error but got nil")
+	}
+}
+
 func TestPairWeightsCalculation(t *testing.T) {
 	folderPath := "../../../testdata/topology-parsing-mi308/topology/nodes"
 	p2pWeights := make(map[int]map[int]int)
@@ -56,8 +66,18 @@ func TestGetSubsetsMethod(t *testing.T) {
 		t.Errorf("fetchAllPairWeights call failed. Error:%v", err)
 	}
 
-	subsets := getAllDeviceSubsets(devices, 3, p2pWeights)
+	subsets, err := getAllDeviceSubsets(devices, 3, p2pWeights)
+	if err != nil {
+		t.Errorf("expected getAllDeviceSubsets to pass. But got error %v", err)
+	}
 	if len(subsets) != 4960 {
 		t.Errorf("expected subsets length to be 4960 but got %d", len(subsets))
+	}
+	subsets, err = getAllDeviceSubsets(devices, 2, p2pWeights)
+	if err != nil {
+		t.Errorf("expected getAllDeviceSubsets to pass. But got error %v", err)
+	}
+	if len(subsets) != 496 {
+		t.Errorf("expected subsets length to be 496 but got %d", len(subsets))
 	}
 }

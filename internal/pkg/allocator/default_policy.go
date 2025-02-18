@@ -17,20 +17,46 @@
 package allocator
 
 import (
+	"fmt"
 	"math"
 	"sort"
 )
 
-type bestEffortPolicy struct{}
+/**
+*  Best effort policy tries to come up with a subset of allocatable GPUs with best possible weight(connectivity).
+*  We calculate weight of every GPU pair. The weight takes into account below information:
+*  1. Type of link between the GPUs(XGMI or PCIE)
+*  2. For partitioned GPUs, it tries to assign weights based on whether partitions are of same GPU or different GPUs
+*  3. If both GPUs are part of same numa node or not
+*  Pair with lower weight takes higher precedence. We calculate the sum of weights b/n individual pair within a given
+*  subset and come up with total score for the subset. Subset with lowest score is given preference during allocation.
+**/
 
-func NewBestEffotPolicy() Policy {
-	return &bestEffortPolicy{}
+const (
+	invalidSize         = "allocation size can not be negative"
+	invalidAvailable    = "available devices count less than allocation size"
+	invalidRequired     = "must_include devices size is more than allocation size"
+	invalidReqAvailable = "must_include length should be less than or equal to avilable device size"
+	invalidInit         = "Init method must be called before Allocate"
+	noCandidateFound    = "No candidate subset found with matching criteria"
+)
+
+type BestEffortPolicy struct {
+	devices    []*Device
+	p2pWeights map[int]map[int]int
 }
 
-func getDevicesFromIds(total []*Device, ids []string) []*Device {
+func NewBestEffortPolicy() *BestEffortPolicy {
+	return &BestEffortPolicy{
+		devices:    make([]*Device, 0),
+		p2pWeights: make(map[int]map[int]int),
+	}
+}
+
+func (b *BestEffortPolicy) getDevicesFromIds(ids []string) []*Device {
 	var res []*Device
 	for _, id := range ids {
-		for _, dev := range total {
+		for _, dev := range b.devices {
 			if dev.Id == id {
 				res = append(res, dev)
 				break
@@ -40,32 +66,44 @@ func getDevicesFromIds(total []*Device, ids []string) []*Device {
 	return res
 }
 
-func (b *bestEffortPolicy) Allocate(availableIds, requiredIds []string, size int, devices []*Device) []string {
+// Init initializes pair wise weights of all devices and stores in-memory
+func (b *BestEffortPolicy) Init(devs []*Device, topoDir string) error {
+	err := fetchAllPairWeights(devs, b.p2pWeights, topoDir)
+	if err == nil {
+		b.devices = append(b.devices, devs...)
+	}
+	return err
+}
+
+func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int) ([]string, error) {
+	outset := []string{}
 	if size <= 0 {
-		return []string{}
+		return outset, fmt.Errorf(invalidSize)
 	}
 
 	if len(availableIds) < size {
-		return []string{}
+		return outset, fmt.Errorf(invalidAvailable)
 	}
 
 	if len(requiredIds) > size {
-		return []string{}
+		return outset, fmt.Errorf(invalidRequired)
 	}
 
 	if len(requiredIds) > len(availableIds) {
-		return []string{}
+		return outset, fmt.Errorf(invalidReqAvailable)
 	}
 
-	available := getDevicesFromIds(devices, availableIds)
-	required := getDevicesFromIds(devices, requiredIds)
+	if len(b.devices) == 0 || len(b.p2pWeights) == 0 {
+		return outset, fmt.Errorf(invalidInit)
+	}
 
-	p2pWeights := make(map[int]map[int]int)
-	err := fetchAllPairWeights(available, p2pWeights, "")
+	available := b.getDevicesFromIds(availableIds)
+	required := b.getDevicesFromIds(requiredIds)
+	allSubsets, err := getAllDeviceSubsets(available, size, b.p2pWeights)
+
 	if err != nil {
-		return []string{}
+		return outset, err
 	}
-	allSubsets := getAllDeviceSubsets(available, size, p2pWeights)
 
 	var requiredNodeIds []int
 	for i := 0; i < len(required); i++ {
@@ -86,9 +124,8 @@ func (b *bestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 		}
 	}
 	if candidate == nil {
-		return []string{}
+		return outset, fmt.Errorf(noCandidateFound)
 	}
-	var outset []string
 	for _, id := range candidate.Ids {
 		for _, d := range available {
 			if d.NodeId == id {
@@ -97,5 +134,5 @@ func (b *bestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 			}
 		}
 	}
-	return outset
+	return outset, nil
 }

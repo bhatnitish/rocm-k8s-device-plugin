@@ -204,7 +204,7 @@ func (p *AMDGPUPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 		}
 	}
 
-	loop:
+loop:
 	for {
 		select {
 		case <-p.Heartbeat:
@@ -244,9 +244,12 @@ func (p *AMDGPUPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 // informed allocation decision when possible.
 func (p *AMDGPUPlugin) GetPreferredAllocation(ctx context.Context, req *pluginapi.PreferredAllocationRequest) (*pluginapi.PreferredAllocationResponse, error) {
 	response := &pluginapi.PreferredAllocationResponse{}
-	for _, req := range req.ContainerRequests{
+	for _, req := range req.ContainerRequests {
 		// TODO: pass gpus to policy allocate method
-		allocated_ids := NewBestEffortPolicy().Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size, nil)
+		allocated_ids, err := NewBestEffortPolicy().Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size)
+		if err != nil {
+			return nil, fmt.Errorf("unable to get preferred allocation list. Error:%v", err)
+		}
 		resp := &pluginapi.ContainerPreferredAllocationResponse{
 			DeviceIDs: allocated_ids,
 		}

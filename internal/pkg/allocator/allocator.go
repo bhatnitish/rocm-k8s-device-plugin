@@ -16,8 +16,7 @@
 
 package allocator
 
-import (
-)
+import ()
 
 type Allocator struct {
 	available []*Device
@@ -26,5 +25,6 @@ type Allocator struct {
 }
 
 type Policy interface {
-	Allocate(available, required []string, size int, devices []*Device) []string
+	Init(devs []*Device, topoDir string) error
+	Allocate(available, required []string, size int) ([]string, error)
 }

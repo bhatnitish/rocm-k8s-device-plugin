@@ -24,17 +24,42 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+
+	"github.com/golang/glog"
 )
 
 const (
 	topoRootPath = "/sys/class/kfd/kfd/topology/nodes"
 )
 
+// below scores/weights are used to determine the closeness/efficiency of communication between GPU pairs
+const (
+	// weight if GPUs/partitions belong to same GPU
+	sameDevIdWeight = 1
+	// weight if GPUs/partitions belong to different GPU.
+	// In case of full GPUs, the weight is 3
+	differentDevIdWeight = 3
+	// weight if a pair is connected via XGMI link
+	xgmiLinkWeight = 2
+	// weight if a pair is connected via PCIE link
+	pcieLinkWeight = 10
+	// weight if a pair is connected via any other link apart from XGMI or PCIE
+	otherLinkWeight = 30
+	// weight if GPU pair belongs to same numa node
+	sameNumaNodeWeight = 7
+	// weight if GPU pair belongs to different numa node
+	differentNumaNodeWeight = 11
+)
+
 type Device struct {
-	Id       string
-	NodeId   int
-	NumaNode int
-	DevId    int
+	Id               string
+	NodeId           int
+	NumaNode         int
+	DevId            int
+	Card             int
+	RenderD          int
+	ComputePartition string
+	MemoryPartition  string
 }
 
 type DeviceSet struct {
@@ -56,6 +81,9 @@ func setContainsAll(set []int, subset []int) bool {
 	if len(subset) > len(set) {
 		return false
 	}
+	if len(subset) == 0 {
+		return true
+	}
 	for _, dev := range subset {
 		if !setContains(set, dev) {
 			return false
@@ -66,7 +94,9 @@ func setContainsAll(set []int, subset []int) bool {
 
 func fetchTopoProperties(path string, re []*regexp.Regexp) ([]int, error) {
 	f, e := os.Open(path)
+	defer f.Close()
 	if e != nil {
+		glog.Errorf("Unable to open properties file. Error:%v", e)
 		return []int{0}, e
 	}
 
@@ -80,12 +110,12 @@ func fetchTopoProperties(path string, re []*regexp.Regexp) ([]int, error) {
 			}
 			v, err := strconv.ParseInt(m[1], 0, 32)
 			if err != nil {
+				glog.Errorf("Unable to parse properties file. Error:%v", err)
 				return nil, err
 			}
 			res[idx] = int(v)
 		}
 	}
-	f.Close()
 
 	return res, nil
 }
@@ -93,23 +123,23 @@ func fetchTopoProperties(path string, re []*regexp.Regexp) ([]int, error) {
 func calculatePairWeight(from, to *Device, linkType int) int {
 	weight := 0
 	if from.DevId == to.DevId {
-		weight = weight + 1
+		weight = weight + sameDevIdWeight
 	} else {
-		weight = weight + 3
+		weight = weight + differentDevIdWeight
 	}
 
 	if linkType == 11 { // link type 11 is xgmi
-		weight = weight + 2
+		weight = weight + xgmiLinkWeight
 	} else if linkType == 2 { //link type 2 is PCIE
-		weight = weight + 10
+		weight = weight + pcieLinkWeight
 	} else { // other link types are given higher weight
-		weight = weight + 30
+		weight = weight + otherLinkWeight
 	}
 
 	if from.NumaNode == to.NumaNode {
-		weight = weight + 7
+		weight = weight + sameNumaNodeWeight
 	} else {
-		weight = weight + 11
+		weight = weight + differentNumaNodeWeight
 	}
 	return weight
 }
@@ -118,7 +148,7 @@ func scanAndPopulatePeerWeights(fromPath string, devices []*Device, lookupNodes 
 	paths, err1 := filepath.Glob(filepath.Join(fromPath, "io_links", "[0-9]*"))
 	p2pPaths, err2 := filepath.Glob(filepath.Join(fromPath, "p2p_links", "[0-9]*"))
 	if err1 != nil && err2 != nil {
-		// TODO: log error
+		glog.Errorf("unable to fetch io_links and p2p_links folders. Error1:%v Error2:%v", err1, err2)
 		return fmt.Errorf("Unable to Glob io_links and p2p_links paths")
 	}
 	if len(p2pPaths) > 0 {
@@ -133,7 +163,6 @@ func scanAndPopulatePeerWeights(fromPath string, devices []*Device, lookupNodes 
 		propFile := filepath.Join(topath, "properties")
 		vals, err := fetchTopoProperties(propFile, re)
 		if err != nil {
-			// TODO: log error
 			continue
 		}
 		// to avoid duplicates in the map we make sure from < to
@@ -153,6 +182,7 @@ func scanAndPopulatePeerWeights(fromPath string, devices []*Device, lookupNodes 
 		}
 
 		var fromDev, toDev *Device
+		devsFound := false
 		for idx := range devices {
 			if devices[idx].NodeId == from {
 				fromDev = devices[idx]
@@ -161,29 +191,32 @@ func scanAndPopulatePeerWeights(fromPath string, devices []*Device, lookupNodes 
 				toDev = devices[idx]
 			}
 			if fromDev != nil && toDev != nil {
+				devsFound = true
 				break
 			}
 		}
-		if _, ok := p2pWeights[from]; !ok {
-			p2pWeights[from] = make(map[int]int)
+		if devsFound {
+			if _, ok := p2pWeights[from]; !ok {
+				p2pWeights[from] = make(map[int]int)
+			}
+			p2pWeights[from][to] = calculatePairWeight(fromDev, toDev, int(vals[2]))
 		}
-		p2pWeights[from][to] = calculatePairWeight(fromDev, toDev, int(vals[2]))
 	}
 	return nil
 }
 
 func fetchAllPairWeights(devices []*Device, p2pWeights map[int]map[int]int, folderPath string) error {
 	if len(devices) == 0 {
-		//TODO: log
-		return nil
+		errMsg := fmt.Sprintf("Devices list is empty. Unable to calculate pair wise weights")
+		glog.Info(errMsg)
+		return fmt.Errorf(errMsg)
 	}
 	if folderPath == "" {
 		folderPath = topoRootPath
 	}
-
 	paths, err := filepath.Glob(filepath.Join(folderPath, "[0-9]*"))
 	if err != nil {
-		return fmt.Errorf("unable to find nodes under topo directory")
+		return fmt.Errorf("unable to find gpu nodes under topo directory")
 	}
 	nodeIds := make(map[int]struct{})
 	for idx := range devices {
@@ -199,6 +232,7 @@ func fetchAllPairWeights(devices []*Device, p2pWeights map[int]map[int]int, fold
 		}
 		err = scanAndPopulatePeerWeights(path, devices, nodeIds, p2pWeights)
 		if err != nil {
+
 			return err
 		}
 	}
@@ -246,13 +280,13 @@ func deriveSubsetsFromPrevLevel(subsets []*DeviceSet, availableIds []int, p2pWei
 	return outset
 }
 
-func getAllDeviceSubsets(available []*Device, size int, p2pWeights map[int]map[int]int) []*DeviceSet {
+func getAllDeviceSubsets(available []*Device, size int, p2pWeights map[int]map[int]int) ([]*DeviceSet, error) {
 	if size <= 0 {
-		return []*DeviceSet{}
+		return []*DeviceSet{}, fmt.Errorf("subset size should be positive integer")
 	}
 
 	if len(available) < size {
-		return []*DeviceSet{}
+		return []*DeviceSet{}, fmt.Errorf("subset size is more than available devices")
 	}
 
 	var availableIds []int
@@ -263,8 +297,7 @@ func getAllDeviceSubsets(available []*Device, size int, p2pWeights map[int]map[i
 		return i < j
 	})
 
-	var subsets [][]*DeviceSet
-	subsets = make([][]*DeviceSet, size)
+	subsets := make([][]*DeviceSet, size)
 	//for level 0 create subsets with single element
 	subsets[0] = make([]*DeviceSet, 0)
 	for index, id := range availableIds {
@@ -277,5 +310,5 @@ func getAllDeviceSubsets(available []*Device, size int, p2pWeights map[int]map[i
 		subsets[i] = make([]*DeviceSet, 0)
 		subsets[i] = append(subsets[i], currLevel...)
 	}
-	return subsets[size-1]
+	return subsets[size-1], nil
 }
