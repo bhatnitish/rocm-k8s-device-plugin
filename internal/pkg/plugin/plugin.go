@@ -64,7 +64,7 @@ func getDevices() []*allocator.Device {
 	var deviceList []*allocator.Device
 
 	for id, deviceData := range devices {
-		device := &Device{
+		device := &allocator.Device{
 			Id:               id,
 			Card:             deviceData["card"].(int),
 			RenderD:          deviceData["renderD"].(int),
@@ -269,7 +269,7 @@ func (p *AMDGPUPlugin) GetPreferredAllocation(ctx context.Context, req *pluginap
 	response := &pluginapi.PreferredAllocationResponse{}
 	for _, req := range req.ContainerRequests {
 		// TODO: pass gpus to policy allocate method
-		allocated_ids, err := p.devAllocator.Allocate(req.available_deviceIDs, req.must_include_deviceIDs, req.allocation_size)
+		allocated_ids, err := p.devAllocator.Allocate(req.AvailableDeviceIDs, req.MustIncludeDeviceIDs, int(req.AllocationSize))
 		if err != nil {
 			return nil, fmt.Errorf("unable to get preferred allocation list. Error:%v", err)
 		}
