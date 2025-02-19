@@ -68,24 +68,19 @@ type DeviceSet struct {
 	LastIdx     int
 }
 
-func setContains(set []int, dev int) bool {
-	for i := range set {
-		if set[i] == dev {
-			return true
-		}
-	}
-	return false
-}
-
 func setContainsAll(set []int, subset []int) bool {
 	if len(subset) > len(set) {
 		return false
 	}
-	if len(subset) == 0 {
-		return true
-	}
 	for _, dev := range subset {
-		if !setContains(set, dev) {
+		devFound := false
+		for i := range set {
+			if set[i] == dev {
+				devFound = true
+				break
+			}
+		}
+		if !devFound {
 			return false
 		}
 	}
