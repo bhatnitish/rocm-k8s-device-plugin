@@ -141,7 +141,9 @@ func simpleHealthCheck() bool {
 // GetDevicePluginOptions returns options to be communicated with Device
 // Manager
 func (p *AMDGPUPlugin) GetDevicePluginOptions(ctx context.Context, e *pluginapi.Empty) (*pluginapi.DevicePluginOptions, error) {
-	return &pluginapi.DevicePluginOptions{}, nil
+	return &pluginapi.DevicePluginOptions{
+		GetPreferredAllocationAvailable: true,
+	}, nil
 }
 
 // PreStartContainer is expected to be called before each container start if indicated by plugin during registration phase.
@@ -271,6 +273,7 @@ func (p *AMDGPUPlugin) GetPreferredAllocation(ctx context.Context, req *pluginap
 		// TODO: pass gpus to policy allocate method
 		allocated_ids, err := p.devAllocator.Allocate(req.AvailableDeviceIDs, req.MustIncludeDeviceIDs, int(req.AllocationSize))
 		if err != nil {
+			glog.Errorf("unable to get preferred allocation list. Error:%v", err)
 			return nil, fmt.Errorf("unable to get preferred allocation list. Error:%v", err)
 		}
 		resp := &pluginapi.ContainerPreferredAllocationResponse{

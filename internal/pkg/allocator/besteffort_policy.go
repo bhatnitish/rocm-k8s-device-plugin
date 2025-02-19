@@ -19,7 +19,10 @@ package allocator
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
+
+	"github.com/golang/glog"
 )
 
 /**
@@ -93,7 +96,25 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 		return outset, fmt.Errorf(invalidReqAvailable)
 	}
 
-	if len(b.devices) == 0 || len(b.p2pWeights) == 0 {
+	if len(b.devices) == 0 {
+		return outset, fmt.Errorf(invalidInit)
+	}
+
+	if len(availableIds) == size {
+		sort.Slice(availableIds, func(i, j int) bool {
+			return availableIds[i] < availableIds[j]
+		})
+		sort.Slice(requiredIds, func(i, j int) bool {
+			return requiredIds[i] < requiredIds[j]
+		})
+		if slices.Equal(availableIds, requiredIds) {
+			return availableIds, nil
+		} else {
+			return outset, fmt.Errorf(noCandidateFound)
+		}
+	}
+
+	if len(b.p2pWeights) == 0 {
 		return outset, fmt.Errorf(invalidInit)
 	}
 
@@ -134,5 +155,6 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 			}
 		}
 	}
+	glog.Infof("best device subset:%v best score:%v", outset, candidate.TotalWeight)
 	return outset, nil
 }
