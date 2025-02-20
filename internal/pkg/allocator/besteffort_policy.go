@@ -19,7 +19,6 @@ package allocator
 import (
 	"fmt"
 	"math"
-	"slices"
 	"sort"
 
 	"github.com/golang/glog"
@@ -45,13 +44,13 @@ const (
 )
 
 type BestEffortPolicy struct {
-	devices    []*Device
+	devices    map[string]*Device
 	p2pWeights map[int]map[int]int
 }
 
 func NewBestEffortPolicy() *BestEffortPolicy {
 	return &BestEffortPolicy{
-		devices:    make([]*Device, 0),
+		devices:    make(map[string]*Device),
 		p2pWeights: make(map[int]map[int]int),
 	}
 }
@@ -59,12 +58,7 @@ func NewBestEffortPolicy() *BestEffortPolicy {
 func (b *BestEffortPolicy) getDevicesFromIds(ids []string) []*Device {
 	var res []*Device
 	for _, id := range ids {
-		for _, dev := range b.devices {
-			if dev.Id == id {
-				res = append(res, dev)
-				break
-			}
-		}
+		res = append(res, b.devices[id])
 	}
 	return res
 }
@@ -73,7 +67,9 @@ func (b *BestEffortPolicy) getDevicesFromIds(ids []string) []*Device {
 func (b *BestEffortPolicy) Init(devs []*Device, topoDir string) error {
 	err := fetchAllPairWeights(devs, b.p2pWeights, topoDir)
 	if err == nil {
-		b.devices = append(b.devices, devs...)
+		for idx := range devs {
+			b.devices[devs[idx].Id] = devs[idx]
+		}
 	}
 	return err
 }
@@ -101,17 +97,7 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 	}
 
 	if len(availableIds) == size {
-		sort.Slice(availableIds, func(i, j int) bool {
-			return availableIds[i] < availableIds[j]
-		})
-		sort.Slice(requiredIds, func(i, j int) bool {
-			return requiredIds[i] < requiredIds[j]
-		})
-		if slices.Equal(availableIds, requiredIds) {
-			return availableIds, nil
-		} else {
-			return outset, fmt.Errorf(noCandidateFound)
-		}
+		return availableIds, nil
 	}
 
 	if len(b.p2pWeights) == 0 {
@@ -131,7 +117,7 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 		requiredNodeIds = append(requiredNodeIds, required[i].NodeId)
 	}
 	sort.Slice(requiredNodeIds, func(i, j int) bool {
-		return i < j
+		return requiredNodeIds[i] < requiredNodeIds[j]
 	})
 
 	bestScore := math.MaxInt32
@@ -142,10 +128,8 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 		}
 		if subset.TotalWeight < bestScore {
 			candidate = subset
+			bestScore = subset.TotalWeight
 		}
-	}
-	if candidate == nil {
-		return outset, fmt.Errorf(noCandidateFound)
 	}
 	for _, id := range candidate.Ids {
 		for _, d := range available {

@@ -35,20 +35,20 @@ const (
 // below scores/weights are used to determine the closeness/efficiency of communication between GPU pairs
 const (
 	// weight if GPUs/partitions belong to same GPU
-	sameDevIdWeight = 1
+	sameDevIdWeight = 10
+	// weight if a pair is connected via XGMI link
+	xgmiLinkWeight = 10
+	// weight if GPU pair belongs to same numa node
+	sameNumaNodeWeight = 10
 	// weight if GPUs/partitions belong to different GPU.
 	// In case of full GPUs, the weight is 3
-	differentDevIdWeight = 3
-	// weight if a pair is connected via XGMI link
-	xgmiLinkWeight = 2
-	// weight if a pair is connected via PCIE link
-	pcieLinkWeight = 10
-	// weight if a pair is connected via any other link apart from XGMI or PCIE
-	otherLinkWeight = 30
-	// weight if GPU pair belongs to same numa node
-	sameNumaNodeWeight = 7
+	differentDevIdWeight = 20
 	// weight if GPU pair belongs to different numa node
-	differentNumaNodeWeight = 11
+	differentNumaNodeWeight = 20
+	// weight if a pair is connected via PCIE link
+	pcieLinkWeight = 40
+	// weight if a pair is connected via any other link apart from XGMI or PCIE
+	otherLinkWeight = 50
 )
 
 type Device struct {
@@ -89,11 +89,11 @@ func setContainsAll(set []int, subset []int) bool {
 
 func fetchTopoProperties(path string, re []*regexp.Regexp) ([]int, error) {
 	f, e := os.Open(path)
-	defer f.Close()
 	if e != nil {
 		glog.Errorf("Unable to open properties file. Error:%v", e)
 		return []int{0}, e
 	}
+	defer f.Close()
 
 	res := make([]int, len(re))
 	scanner := bufio.NewScanner(f)
@@ -289,7 +289,7 @@ func getAllDeviceSubsets(available []*Device, size int, p2pWeights map[int]map[i
 		availableIds = append(availableIds, available[i].NodeId)
 	}
 	sort.Slice(availableIds, func(i, j int) bool {
-		return i < j
+		return availableIds[i] < availableIds[j]
 	})
 
 	subsets := make([][]*DeviceSet, size)
