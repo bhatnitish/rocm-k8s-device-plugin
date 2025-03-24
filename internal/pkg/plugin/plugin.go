@@ -197,60 +197,55 @@ func (p *AMDGPUPlugin) ListAndWatch(e *pluginapi.Empty, s pluginapi.DevicePlugin
 	resourceTypeDevs := make(map[string][]*pluginapi.Device)
 
 	if isHomogeneous {
-		// limit scope for hwloc
-		func() {
-			i := 0
-			for id, device := range p.AMDGPUs {
-				dev := &pluginapi.Device{
-					ID:     id,
-					Health: pluginapi.Healthy,
-				}
-				devs[i] = dev
-				i++
+		i := 0
+		for id, device := range p.AMDGPUs {
+			dev := &pluginapi.Device{
+				ID:     id,
+				Health: pluginapi.Healthy,
+			}
+			devs[i] = dev
+			i++
 
-				numas := []int64{int64(device["numaNode"].(int))}
-				glog.Infof("Watching GPU with bus ID: %s NUMA Node: %+v", id, numas)
+			numas := []int64{int64(device["numaNode"].(int))}
+			glog.Infof("Watching GPU with bus ID: %s NUMA Node: %+v", id, numas)
 
-				numaNodes := make([]*pluginapi.NUMANode, len(numas))
-				for j, v := range numas {
-					numaNodes[j] = &pluginapi.NUMANode{
-						ID: int64(v),
-					}
-				}
-
-				dev.Topology = &pluginapi.TopologyInfo{
-					Nodes: numaNodes,
+			numaNodes := make([]*pluginapi.NUMANode, len(numas))
+			for j, v := range numas {
+				numaNodes[j] = &pluginapi.NUMANode{
+					ID: int64(v),
 				}
 			}
-		}()
+
+			dev.Topology = &pluginapi.TopologyInfo{
+				Nodes: numaNodes,
+			}
+		}
 		s.Send(&pluginapi.ListAndWatchResponse{Devices: devs})
 	} else {
-		func() {
-			// Iterate through deviceCountMap and create empty lists for each partitionType whose count is > 0 with variable name same as partitionType
-			for id, device := range p.AMDGPUs {
-				dev := &pluginapi.Device{
-					ID:     id,
-					Health: pluginapi.Healthy,
-				}
-				// Append a device belonging to a certain partition type to its respective list
-				partitionType := device["computePartition"].(string) + "_" + device["memoryPartition"].(string)
-				resourceTypeDevs[partitionType] = append(resourceTypeDevs[partitionType], dev)
+		// Iterate through deviceCountMap and create empty lists for each partitionType whose count is > 0 with variable name same as partitionType
+		for id, device := range p.AMDGPUs {
+			dev := &pluginapi.Device{
+				ID:     id,
+				Health: pluginapi.Healthy,
+			}
+			// Append a device belonging to a certain partition type to its respective list
+			partitionType := device["computePartition"].(string) + "_" + device["memoryPartition"].(string)
+			resourceTypeDevs[partitionType] = append(resourceTypeDevs[partitionType], dev)
 
-				numas := []int64{int64(device["numaNode"].(int))}
-				glog.Infof("Watching GPU with bus ID: %s NUMA Node: %+v", id, numas)
+			numas := []int64{int64(device["numaNode"].(int))}
+			glog.Infof("Watching GPU with bus ID: %s NUMA Node: %+v", id, numas)
 
-				numaNodes := make([]*pluginapi.NUMANode, len(numas))
-				for j, v := range numas {
-					numaNodes[j] = &pluginapi.NUMANode{
-						ID: int64(v),
-					}
-				}
-
-				dev.Topology = &pluginapi.TopologyInfo{
-					Nodes: numaNodes,
+			numaNodes := make([]*pluginapi.NUMANode, len(numas))
+			for j, v := range numas {
+				numaNodes[j] = &pluginapi.NUMANode{
+					ID: int64(v),
 				}
 			}
-		}()
+
+			dev.Topology = &pluginapi.TopologyInfo{
+				Nodes: numaNodes,
+			}
+		}
 		// Send the appropriate list of devices based on the partitionType
 		if devList, exists := resourceTypeDevs[p.Resource]; exists {
 			s.Send(&pluginapi.ListAndWatchResponse{Devices: devList})
