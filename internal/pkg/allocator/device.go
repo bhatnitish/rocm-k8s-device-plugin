@@ -342,7 +342,7 @@ func filterPartitions(partitions map[int]*DevicePartitions, available, required 
 		if len1 == len2 {
 			return outset[i].ParentId < outset[j].ParentId
 		}
-		return len1 < len2
+		return len1 > len2
 	})
 	return outset
 }

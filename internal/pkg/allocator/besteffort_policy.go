@@ -108,6 +108,10 @@ func (b *BestEffortPolicy) Allocate(availableIds, requiredIds []string, size int
 		return availableIds, nil
 	}
 
+	if len(requiredIds) == size {
+		return requiredIds, nil
+	}
+
 	if len(b.p2pWeights) == 0 {
 		return outset, fmt.Errorf(invalidInit)
 	}
