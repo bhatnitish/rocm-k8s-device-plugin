@@ -126,19 +126,19 @@ func TestBestPolicyAllocator(t *testing.T) {
 				description: "Allocate 1 device",
 				size:        1,
 				required:    nil,
-				expectedIds: []string{"test8"},
+				expectedIds: []string{"test1"},
 			},
 			{
 				description: "Allocate 3 devices",
 				size:        3,
 				required:    nil,
-				expectedIds: []string{"test8", "amdgpu_xcp_57", "amdgpu_xcp_58"},
+				expectedIds: []string{"test1", "amdgpu_xcp_1", "amdgpu_xcp_2"},
 			},
 			{
 				description: "Allocate 5 devices",
 				size:        5,
 				required:    nil,
-				expectedIds: []string{"test8", "amdgpu_xcp_57", "amdgpu_xcp_58", "amdgpu_xcp_59", "amdgpu_xcp_60"},
+				expectedIds: []string{"test1", "amdgpu_xcp_1", "amdgpu_xcp_2", "amdgpu_xcp_3", "amdgpu_xcp_4"},
 			},
 			{
 				description: "Allocate 3 - same numa",
