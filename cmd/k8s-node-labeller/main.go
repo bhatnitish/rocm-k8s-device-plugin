@@ -27,17 +27,69 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
-var log = logf.Log.WithName("amdgpu-node-labeller")
+var (
+	log                      = logf.Log.WithName("amdgpu-node-labeller")
+	gitDescribe              string
+	allLabelKeys             = []string{}
+	allExperimentalLabelKeys = []string{}
+)
+
+const (
+	experimentalAMDPrefix             = "beta.amd.com"
+	amdPrefix                         = "amd.com"
+	computePartitioningSupportedLabel = "amd.com/compute-partitioning-supported"
+	memoryPartitioningSupportedLabel  = "amd.com/memory-partitioning-supported"
+	partitionTypeLabel                = "amd.com/compute-memory-partition"
+)
+
+func init() {
+	initLabelLists()
+}
+
+func initLabelLists() {
+	// pre-generate all the available node labeller labels
+	// these 2 lists will be used to clean up old labels on the node
+	for name := range labelGenerators {
+		allLabelKeys = append(allLabelKeys, createLabelPrefix(name, false))
+		allExperimentalLabelKeys = append(allExperimentalLabelKeys, createLabelPrefix(name, true))
+	}
+	allLabelKeys = append(allLabelKeys,
+		computePartitioningSupportedLabel,
+		memoryPartitioningSupportedLabel,
+		partitionTypeLabel,
+	)
+}
+
+func removeOldNodeLabels(node *corev1.Node) {
+	if node == nil {
+		return
+	}
+	// for the amd.com node labels
+	// directly remove the old labels
+	for _, label := range allLabelKeys {
+		delete(node.Labels, label)
+	}
+	// for the beta.amd.com node labels
+	// if it exists, both original label and counter label need to be removed, e.g.
+	// beta.amd.com/gpu.family: AI
+	// beta.amd.com/gpu.family.AI: "1"
+	for _, label := range allExperimentalLabelKeys {
+		if val, ok := node.Labels[label]; ok {
+			delete(node.Labels, label)
+			delete(node.Labels, fmt.Sprintf("%s.%s", label, val))
+		}
+	}
+}
 
 func createLabelPrefix(name string, experimental bool) string {
-	var s string
+	var prefix string
 	if experimental {
-		s = "beta."
+		prefix = experimentalAMDPrefix
 	} else {
-		s = ""
+		prefix = amdPrefix
 	}
 
-	return fmt.Sprintf("%samd.com/gpu.%s", s, name)
+	return fmt.Sprintf("%s/gpu.%s", prefix, name)
 }
 
 func createLabels(kind string, entries map[string]int) map[string]string {
@@ -317,22 +369,22 @@ func generatePartitionLabels() map[string]string {
 		// Iterate through deviceCountMap and find the partition type with count > 0
 		for partitionType, count := range deviceCountMap {
 			if count > 0 {
-				labels["amd.com/compute-memory-partition"] = partitionType
+				labels[partitionTypeLabel] = partitionType
 				break
 			}
 		}
 	}
 
 	if IsComputePartitionSupported {
-		labels["amd.com/compute-partitioning-supported"] = "true"
+		labels[computePartitioningSupportedLabel] = "true"
 	} else {
-		labels["amd.com/compute-partitioning-supported"] = "false"
+		labels[computePartitioningSupportedLabel] = "false"
 	}
 
 	if IsMemoryPartitionSupported {
-		labels["amd.com/memory-partitioning-supported"] = "true"
+		labels[memoryPartitioningSupportedLabel] = "true"
 	} else {
-		labels["amd.com/memory-partitioning-supported"] = "false"
+		labels[memoryPartitioningSupportedLabel] = "false"
 	}
 
 	return labels
@@ -360,8 +412,6 @@ func generateLabels(lblProps map[string]*bool) map[string]string {
 
 	return results
 }
-
-var gitDescribe string
 
 func main() {
 	flag.Usage = func() {
