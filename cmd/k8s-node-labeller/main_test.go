@@ -10,29 +10,32 @@ import (
 
 var (
 	expectedAllLabelKeys = map[string]bool{
-		"amd.com/gpu.family":                     true,
-		"amd.com/gpu.driver-version":             true,
-		"amd.com/gpu.driver-src-version":         true,
-		"amd.com/gpu.firmware":                   true,
-		"amd.com/gpu.device-id":                  true,
-		"amd.com/gpu.product-name":               true,
-		"amd.com/gpu.vram":                       true,
-		"amd.com/gpu.simd-count":                 true,
-		"amd.com/gpu.cu-count":                   true,
-		"amd.com/compute-partitioning-supported": true,
-		"amd.com/memory-partitioning-supported":  true,
-		"amd.com/compute-memory-partition":       true,
+		"amd.com/gpu.family":                         true,
+		"amd.com/gpu.driver-version":                 true,
+		"amd.com/gpu.driver-src-version":             true,
+		"amd.com/gpu.firmware":                       true,
+		"amd.com/gpu.device-id":                      true,
+		"amd.com/gpu.product-name":                   true,
+		"amd.com/gpu.vram":                           true,
+		"amd.com/gpu.simd-count":                     true,
+		"amd.com/gpu.cu-count":                       true,
+		"amd.com/gpu.compute-memory-partition":       true,
+		"amd.com/gpu.compute-partitioning-supported": true,
+		"amd.com/gpu.memory-partitioning-supported":  true,
 	}
 	expectedAllExperimentalLabelKeys = map[string]bool{
-		"beta.amd.com/gpu.family":             true,
-		"beta.amd.com/gpu.driver-version":     true,
-		"beta.amd.com/gpu.driver-src-version": true,
-		"beta.amd.com/gpu.firmware":           true,
-		"beta.amd.com/gpu.device-id":          true,
-		"beta.amd.com/gpu.product-name":       true,
-		"beta.amd.com/gpu.vram":               true,
-		"beta.amd.com/gpu.simd-count":         true,
-		"beta.amd.com/gpu.cu-count":           true,
+		"beta.amd.com/gpu.family":                         true,
+		"beta.amd.com/gpu.driver-version":                 true,
+		"beta.amd.com/gpu.driver-src-version":             true,
+		"beta.amd.com/gpu.firmware":                       true,
+		"beta.amd.com/gpu.device-id":                      true,
+		"beta.amd.com/gpu.product-name":                   true,
+		"beta.amd.com/gpu.vram":                           true,
+		"beta.amd.com/gpu.simd-count":                     true,
+		"beta.amd.com/gpu.cu-count":                       true,
+		"beta.amd.com/gpu.compute-memory-partition":       true,
+		"beta.amd.com/gpu.compute-partitioning-supported": true,
+		"beta.amd.com/gpu.memory-partitioning-supported":  true,
 	}
 )
 
@@ -89,6 +92,26 @@ func TestRemoveOldNodeLabels(t *testing.T) {
 			expectLabels: map[string]string{
 				"dummyLabel1": "1",
 				"dummyLabel2": "2",
+			},
+		},
+		{
+			inputNode: &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"amd.com/cpu":    "true",
+						"amd.com/gpu":    "true",
+						"amd.com/mi300x": "true",
+						"dummyLabel1":    "1",
+						"dummyLabel2":    "2",
+					},
+				},
+			},
+			expectLabels: map[string]string{
+				"amd.com/cpu":    "true",
+				"amd.com/gpu":    "true",
+				"amd.com/mi300x": "true",
+				"dummyLabel1":    "1",
+				"dummyLabel2":    "2",
 			},
 		},
 	}

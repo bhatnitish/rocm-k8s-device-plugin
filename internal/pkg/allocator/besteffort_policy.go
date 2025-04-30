@@ -1,17 +1,17 @@
 /**
- * Copyright 2018 Advanced Micro Devices, Inc.  All rights reserved.
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+# Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the \"License\");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an \"AS IS\" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 **/
 
 package allocator
@@ -45,7 +45,7 @@ const (
 type BestEffortPolicy struct {
 	devices          []*Device
 	devicesMap       map[string]*Device
-	devicePartitions map[int]*DevicePartitions
+	devicePartitions map[string]*DevicePartitions
 	p2pWeights       map[int]map[int]int
 }
 
@@ -53,7 +53,7 @@ func NewBestEffortPolicy() *BestEffortPolicy {
 	return &BestEffortPolicy{
 		devices:          make([]*Device, 0),
 		devicesMap:       make(map[string]*Device),
-		devicePartitions: make(map[int]*DevicePartitions),
+		devicePartitions: make(map[string]*DevicePartitions),
 		p2pWeights:       make(map[int]map[int]int),
 	}
 }
@@ -69,6 +69,9 @@ func (b *BestEffortPolicy) getDevicesFromIds(ids []string) []*Device {
 // Init initializes pair wise weights of all devices and stores in-memory
 func (b *BestEffortPolicy) Init(devs []*Device, topoDir string) error {
 	err := fetchAllPairWeights(devs, b.p2pWeights, topoDir)
+	if len(b.p2pWeights) == 0 {
+		return fmt.Errorf("Besteffort Policy init failed to initialize p2pWeights")
+	}
 	if err == nil {
 		b.devices = devs
 		for idx := range devs {

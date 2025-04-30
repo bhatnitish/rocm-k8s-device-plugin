@@ -1,5 +1,5 @@
 /**
-# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+# Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the \"License\");
 # you may not use this file except in compliance with the License.
@@ -53,14 +53,14 @@ const (
 )
 
 type Device struct {
-	Id               string
-	NodeId           int
-	NumaNode         int
-	DevId            int
-	Card             int
-	RenderD          int
-	ComputePartition string
-	MemoryPartition  string
+	Id                   string
+	NodeId               int
+	NumaNode             int
+	DevId                string
+	Card                 int
+	RenderD              int
+	ComputePartitionType string
+	MemoryPartitionType  string
 }
 
 type DeviceSet struct {
@@ -72,7 +72,7 @@ type DeviceSet struct {
 
 type DevicePartitions struct {
 	ParentId string
-	DevId    int
+	DevId    string
 	Ids      []int
 	Devs     []string
 }
@@ -281,8 +281,8 @@ func NewDeviceSet(nodeIds []int, weight, lastIdx int) *DeviceSet {
 
 // in case gpu is partitioned, we group partitions belonging to same gpu/device
 // preference is to allocate maximum partitions from same gpu
-func groupPartitionsByDevId(devs []*Device) map[int]*DevicePartitions {
-	partitions := make(map[int]*DevicePartitions)
+func groupPartitionsByDevId(devs []*Device) map[string]*DevicePartitions {
+	partitions := make(map[string]*DevicePartitions)
 	for _, dev := range devs {
 		if _, ok := partitions[dev.DevId]; !ok {
 			partitions[dev.DevId] = &DevicePartitions{
@@ -304,7 +304,7 @@ func groupPartitionsByDevId(devs []*Device) map[int]*DevicePartitions {
 // available represents the available/unallocated devices when the allocate request is called
 // required represents the devices that are required to be allocated
 // we filter out required ones as they are included in output set by default. removing them saves us computation time
-func filterPartitions(partitions map[int]*DevicePartitions, available, required []*Device) []*DevicePartitions {
+func filterPartitions(partitions map[string]*DevicePartitions, available, required []*Device) []*DevicePartitions {
 	availableIdMap := make(map[int]struct{})
 	requiredIdMap := make(map[int]struct{})
 	outset := make([]*DevicePartitions, 0)
@@ -347,7 +347,7 @@ func filterPartitions(partitions map[int]*DevicePartitions, available, required 
 	return outset
 }
 
-func getCandidateDeviceSubsets(allDevPartitions map[int]*DevicePartitions, total, available, required []*Device, size int, p2pWeights map[int]map[int]int) ([]*DeviceSet, error) {
+func getCandidateDeviceSubsets(allDevPartitions map[string]*DevicePartitions, total, available, required []*Device, size int, p2pWeights map[int]map[int]int) ([]*DeviceSet, error) {
 	if size <= 0 {
 		return []*DeviceSet{}, fmt.Errorf("subset size should be positive integer")
 	}

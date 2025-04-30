@@ -3,6 +3,12 @@ defaults:
   maxdepth: 6
 root: index
 subtrees:
-- caption: About
+- caption: User Guide
   entries:
-  - file: about/license
+  - file: user-guide/installation
+  - file: user-guide/configuration
+  - file: user-guide/examples
+  - file: user-guide/resource-allocation
+- caption: Contributing
+  entries:
+  - file: contributing/development

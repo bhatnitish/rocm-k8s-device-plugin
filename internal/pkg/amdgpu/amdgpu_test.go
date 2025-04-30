@@ -28,7 +28,7 @@ import (
 )
 
 func hasAMDGPU(t *testing.T) bool {
-	devices, _ := GetAMDGPUs()
+	devices := GetAMDGPUs()
 
 	if len(devices) <= 0 {
 		return false
@@ -41,7 +41,7 @@ func TestFirmwareVersionConsistent(t *testing.T) {
 		t.Skip("Skipping test, no AMD GPU found.")
 	}
 
-	devices, _ := GetAMDGPUs()
+	devices := GetAMDGPUs()
 
 	for pci, dev := range devices {
 		card := fmt.Sprintf("card%d", dev["card"])
@@ -73,7 +73,7 @@ func TestAMDGPUcountConsistent(t *testing.T) {
 		t.Skip("Skipping test, no AMD GPU found.")
 	}
 
-	devices, _ := GetAMDGPUs()
+	devices := GetAMDGPUs()
 
 	matches, _ := filepath.Glob("/sys/class/drm/card[0-9]*/device/vendor")
 
@@ -109,7 +109,7 @@ func TestDevFunctional(t *testing.T) {
 		t.Skip("Skipping test, no AMD GPU found.")
 	}
 
-	devices, _ := GetAMDGPUs()
+	devices := GetAMDGPUs()
 
 	for _, dev := range devices {
 		card := fmt.Sprintf("card%d", dev["card"])
@@ -161,6 +161,21 @@ func TestParseTopologyProperties(t *testing.T) {
 	}
 
 }
+
+func TestParseTopologyPropertiesString(t *testing.T) {
+	var v string
+	var re *regexp.Regexp
+	var path string
+
+	re = regexp.MustCompile(`unique_id\s(\d+)`)
+	path = "../../../testdata/topology-parsing/topology/nodes/2/properties"
+	v, _ = ParseTopologyPropertiesString(path, re)
+	if v != "14073402507705256557" {
+		t.Errorf("Error parsing %s for `%s`: expect %s", path, re.String(), "14073402507705256557")
+	}
+
+}
+
 func TestParseDebugFSFirmwareInfo(t *testing.T) {
 	expFeat := map[string]uint32{
 		"VCE":   0,
@@ -216,13 +231,45 @@ func TestParseDebugFSFirmwareInfo(t *testing.T) {
 	}
 }
 
-func TestRenderNodeSetFromTopology(t *testing.T) {
-	renderNodes := renderNodeSetFromTopology("../../../testdata/topology-parsing-mi308")
+func TestRenderDevIdsFromTopology(t *testing.T) {
+	renderDevIds := GetDevIdsFromTopology("../../../testdata/topology-parsing-mi308")
 
-	expNodes := map[int]bool{128: true, 129: true}
-	if !reflect.DeepEqual(renderNodes, expNodes) {
-		val, _ := json.MarshalIndent(renderNodes, "", "  ")
-		exp, _ := json.MarshalIndent(expNodes, "", "  ")
+	expDevIds := map[int]string{
+		128: "598046273873802902",
+		129: "598046273873802902",
+		130: "598046273873802902",
+		131: "598046273873802902",
+		136: "11803749423592941193",
+		137: "11803749423592941193",
+		138: "11803749423592941193",
+		139: "11803749423592941193",
+		144: "10187445671099294242",
+		145: "10187445671099294242",
+		146: "10187445671099294242",
+		147: "10187445671099294242",
+		152: "9604994527082705072",
+		153: "9604994527082705072",
+		154: "9604994527082705072",
+		155: "9604994527082705072",
+		160: "17466021589395472075",
+		161: "17466021589395472075",
+		162: "17466021589395472075",
+		163: "17466021589395472075",
+		168: "1044926823201815193",
+		169: "1044926823201815193",
+		170: "1044926823201815193",
+		171: "1044926823201815193",
+		176: "13372828617950681944",
+		177: "13372828617950681944",
+		178: "13372828617950681944",
+		179: "13372828617950681944",
+		184: "6576958293045616595",
+		185: "6576958293045616595",
+		186: "6576958293045616595",
+		187: "6576958293045616595"}
+	if !reflect.DeepEqual(renderDevIds, expDevIds) {
+		val, _ := json.MarshalIndent(renderDevIds, "", "  ")
+		exp, _ := json.MarshalIndent(expDevIds, "", "  ")
 
 		t.Errorf("RenderNode set was incorrect")
 		t.Errorf("Got: %s", val)

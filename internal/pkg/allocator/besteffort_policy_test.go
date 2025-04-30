@@ -1,5 +1,5 @@
 /**
-# Copyright (c) Advanced Micro Devices, Inc. All rights reserved.
+# Copyright 2025 Advanced Micro Devices, Inc. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the \"License\");
 # you may not use this file except in compliance with the License.
@@ -18,37 +18,11 @@ package allocator
 
 import (
 	"fmt"
-	"log"
-	"os/exec"
 	"sort"
 	"testing"
 )
 
-func setupTopoFolders() {
-	topofolders := []string{"../../../testdata/topo-mi210-xgmi-pcie.tgz", "../../../testdata/topo-mi300-cpx.tgz"}
-	for _, dir := range topofolders {
-		cmd := exec.Command("tar", "-xvf", dir, "-C", "../../../testdata")
-		err := cmd.Run()
-		if err != nil {
-			log.Fatalf("Unable to setup the topo folder for %s", dir)
-		}
-	}
-}
-
-func cleanupTopoFolders() {
-	topofolders := []string{"../../../testdata/topo-mi210-xgmi-pcie", "../../../testdata/topo-mi300-cpx"}
-	for _, dir := range topofolders {
-		cmd := exec.Command("rm", "-rf", dir)
-		err := cmd.Run()
-		if err != nil {
-			log.Fatalf("Unable to cleanup the topo folder %s", dir)
-		}
-	}
-}
-
 func TestBestPolicyAllocator(t *testing.T) {
-	setupTopoFolders()
-	defer cleanupTopoFolders()
 	topos := []testInfo{
 		{
 			devCount:             4,

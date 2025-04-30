@@ -353,46 +353,36 @@ var labelGenerators = map[string]func(map[string]map[string]interface{}) map[str
 
 		return createLabels("cu-count", counts)
 	},
+	"compute-memory-partition": func(gpus map[string]map[string]interface{}) map[string]string {
+		partitionCountMap := amdgpu.UniquePartitionConfigCount(gpus)
+		isHomogeneous := amdgpu.IsHomogeneous()
+		if isHomogeneous {
+			for partitionType, count := range partitionCountMap {
+				if count > 0 {
+					pfx := createLabelPrefix("compute-memory-partition", false)
+					return map[string]string{pfx: partitionType}
+				}
+			}
+		}
+		return map[string]string{}
+	},
+	"compute-partitioning-supported": func(gpus map[string]map[string]interface{}) map[string]string {
+		val := strconv.FormatBool(amdgpu.IsComputePartitionSupported())
+		pfx := createLabelPrefix("compute-partitioning-supported", false)
+		return map[string]string{pfx: val}
+	},
+	"memory-partitioning-supported": func(gpus map[string]map[string]interface{}) map[string]string {
+		val := strconv.FormatBool(amdgpu.IsMemoryPartitionSupported())
+		pfx := createLabelPrefix("memory-partitioning-supported", false)
+		return map[string]string{pfx: val}
+	},
 }
 
 var labelProperties = make(map[string]*bool, len(labelGenerators))
 
-func generatePartitionLabels() map[string]string {
-	_, deviceCountMap := amdgpu.GetAMDGPUs()
-	isHomogeneous := amdgpu.IsHomogeneous()
-	IsComputePartitionSupported := amdgpu.IsComputePartitionSupported()
-	IsMemoryPartitionSupported := amdgpu.IsMemoryPartitionSupported()
-
-	labels := make(map[string]string)
-
-	if isHomogeneous {
-		// Iterate through deviceCountMap and find the partition type with count > 0
-		for partitionType, count := range deviceCountMap {
-			if count > 0 {
-				labels[partitionTypeLabel] = partitionType
-				break
-			}
-		}
-	}
-
-	if IsComputePartitionSupported {
-		labels[computePartitioningSupportedLabel] = "true"
-	} else {
-		labels[computePartitioningSupportedLabel] = "false"
-	}
-
-	if IsMemoryPartitionSupported {
-		labels[memoryPartitioningSupportedLabel] = "true"
-	} else {
-		labels[memoryPartitioningSupportedLabel] = "false"
-	}
-
-	return labels
-}
-
 func generateLabels(lblProps map[string]*bool) map[string]string {
 	results := make(map[string]string, len(labelGenerators))
-	gpus, _ := amdgpu.GetAMDGPUs()
+	gpus := amdgpu.GetAMDGPUs()
 
 	for l, f := range labelGenerators {
 		if !*lblProps[l] {
@@ -403,13 +393,6 @@ func generateLabels(lblProps map[string]*bool) map[string]string {
 			results[k] = v
 		}
 	}
-
-	// Add the new GPU labels
-	gpuLabels := generatePartitionLabels()
-	for k, v := range gpuLabels {
-		results[k] = v
-	}
-
 	return results
 }
 
