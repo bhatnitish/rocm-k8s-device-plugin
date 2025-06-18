@@ -17,12 +17,14 @@
 package amdgpu
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/ROCm/k8s-device-plugin/internal/pkg/exporter"
 	"github.com/ROCm/k8s-device-plugin/internal/pkg/types"
 	"github.com/golang/glog"
 	pluginapi "k8s.io/kubelet/pkg/apis/deviceplugin/v1beta1"
@@ -218,19 +220,91 @@ func (i *AMDGPUVFImpl) UpdateHealth(ctx types.DevicePluginContext) (devices []*p
 		return nil, i.initErr
 	}
 
-	var health = pluginapi.Unhealthy
-
-	if checkDriver(types.AMDGIMDriverPath) {
-		health = pluginapi.Healthy
-	}
-
 	devs, _ := i.devList[ctx.ResourceName()]
 
+	// Check if the GIM driver is available first
+	if !checkDriver(types.AMDGIMDriverPath) {
+		// If GIM driver is not available, mark all devices as unhealthy
+		for _, dev := range devs {
+			dev.Health = pluginapi.Unhealthy
+		}
+		return devs, nil
+	}
+
+	// Get PF health information from the health service
+	// The health service returns health keyed by PF PCI addresses
+	pfHealthMap, err := i.getPFHealthMap()
+	if err != nil {
+		// If we can't get PF health info, fall back to basic driver check
+		glog.Warningf("Failed to get PF health information, falling back to driver check: %v", err)
+		for _, dev := range devs {
+			dev.Health = pluginapi.Healthy
+		}
+		return devs, nil
+	}
+
+	// Map IOMMU group health based on PF health
+	// An IOMMU group is unhealthy if any of its VFs' parent PF is unhealthy
+	iommuGroupHealth := i.mapPFHealthToIOMMUGroups(pfHealthMap)
+
+	// Update device health based on IOMMU group health
 	for _, dev := range devs {
-		dev.Health = health
+		if health, exists := iommuGroupHealth[dev.ID]; exists {
+			dev.Health = health
+		} else {
+			// If no health info available for this IOMMU group, default to healthy
+			dev.Health = pluginapi.Healthy
+		}
 	}
 
 	return devs, nil
+}
+
+// getPFHealthMap retrieves health information for PF devices from the health service
+// Returns a map of PF PCI address -> health status
+func (i *AMDGPUVFImpl) getPFHealthMap() (map[string]string, error) {
+	// Create context with timeout to avoid blocking indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), types.ExporterHealthCheckTimeout)
+	defer cancel()
+
+	// Use the exporter package function to get GPU health information
+	return exporter.GetGPUHealth(ctx)
+}
+
+// mapPFHealthToIOMMUGroups maps PF health status to IOMMU group health status
+// An IOMMU group is considered unhealthy if any VF in that group has an unhealthy parent PF
+// Returns a map of IOMMU group ID -> health status
+func (i *AMDGPUVFImpl) mapPFHealthToIOMMUGroups(pfHealthMap map[string]string) map[string]string {
+	iommuGroupHealth := make(map[string]string)
+
+	// Iterate through all IOMMU groups and their VFs
+	for iommuGroupID, vfInfoList := range i.vfMap {
+		groupHealth := pluginapi.Healthy // Default to healthy
+
+		// Check the health of each VF's parent PF in this IOMMU group
+		for _, vfInfo := range vfInfoList {
+			pfHealth, exists := pfHealthMap[vfInfo.PF]
+			if !exists {
+				// If PF health info is not available, log warning but assume healthy
+				glog.Warningf("No health information available for PF %s (VF %s in IOMMU group %s), assuming healthy",
+					vfInfo.PF, vfInfo.VF, iommuGroupID)
+				continue
+			}
+
+			if pfHealth == pluginapi.Unhealthy {
+				// If any PF is explicitly marked unhealthy, the entire IOMMU group is unhealthy
+				glog.Infof("PF %s is unhealthy, marking IOMMU group %s as unhealthy",
+					vfInfo.PF, iommuGroupID)
+				groupHealth = pluginapi.Unhealthy
+				break
+			}
+		}
+
+		iommuGroupHealth[iommuGroupID] = groupHealth
+		glog.V(4).Infof("IOMMU group %s health status: %s", iommuGroupID, groupHealth)
+	}
+
+	return iommuGroupHealth
 }
 
 // GetVFMapping scans the system's PCI devices to discover AMD devices that are PFs

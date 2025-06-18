@@ -27,6 +27,7 @@ package amdgpu
 import "C"
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -333,10 +334,10 @@ func (i *AMDGPUKFDImpl) UpdateHealth(ctx types.DevicePluginContext) (devices []*
 	devs, ok := i.devList[ctx.ResourceName()]
 	// update with per device GPU health status
 	if i.homogeneous {
-		exporter.PopulatePerGPUDHealth(devs, health)
+		populatePerGPUDHealth(devs, health)
 	} else {
 		if ok {
-			exporter.PopulatePerGPUDHealth(devs, health)
+			populatePerGPUDHealth(devs, health)
 		}
 	}
 
@@ -946,4 +947,28 @@ func countGPUDevFromTopology(topoRootParam ...string) int {
 		f.Close()
 	}
 	return count
+}
+
+// populatePerGPUDHealth populate the per gpu health status if available,
+// else return simple health status
+func populatePerGPUDHealth(devs []*pluginapi.Device, defaultHealth string) {
+	// Create context with timeout to avoid blocking indefinitely
+	ctx, cancel := context.WithTimeout(context.Background(), types.ExporterHealthCheckTimeout)
+	defer cancel()
+
+	var hasHealthSvc = false
+	hMap, err := exporter.GetGPUHealth(ctx)
+	if err == nil {
+		hasHealthSvc = true
+	}
+
+	for i := 0; i < len(devs); i++ {
+		devs[i].Health = defaultHealth
+		if hasHealthSvc {
+			// only use if we have the device id entry
+			if gpuHealth, ok := hMap[devs[i].ID]; ok {
+				devs[i].Health = gpuHealth
+			}
+		}
+	}
 }

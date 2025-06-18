@@ -16,6 +16,8 @@
 
 package types
 
+import "time"
+
 var SupportedLabels = []string{"mode", "firmware", "family", "driver-version", "driver-src-version", "device-id", "product-name", "vram", "simd-count", "cu-count", "compute-memory-partition", "compute-partitioning-supported", "memory-partitioning-supported"}
 
 // Command line parameters
@@ -85,4 +87,7 @@ const (
 
 	// Device Type for PF passthrough in mixed resource naming strategy
 	DeviceTypeGPUPF = "gpu_pf"
+
+	// Exporter health check timeout in seconds
+	ExporterHealthCheckTimeout = 10 * time.Second
 )
